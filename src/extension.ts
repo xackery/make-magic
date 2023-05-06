@@ -7,7 +7,7 @@ let items: vscode.QuickPickItem[] = [];
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Starting make-magic');
 
-	items.push({label:"test", description:"test description"});
+	items.push({label:"(none)", description:"no Makefile found"});
 
 	refreshMakefile();
 	if (vscode.workspace.workspaceFolders !== undefined) {
@@ -28,6 +28,9 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!selection) {
 				return;
 			}
+			if (selection.label === "(none)") {
+				return;
+			}
 			let focusTerminal:vscode.Terminal = (vscode.window.activeTerminal ? vscode.window.activeTerminal : vscode.window.createTerminal());
 			focusTerminal.show(false);
 			focusTerminal.sendText(`make ${selection.label}`);
@@ -46,6 +49,8 @@ export function refreshMakefile() {
 		return;
 	}
 
+	items = [];
+
 	let path = vscode.workspace.workspaceFolders[0].uri.fsPath + "/Makefile";
 	vscode.workspace.fs.stat(vscode.Uri.file(path)).then(stat => {
 		if (stat.type === vscode.FileType.File) {
@@ -59,6 +64,10 @@ export function refreshMakefile() {
 			parseMakefile(path);
 		}
 	});
+
+	if (items.length === 0) {
+		items.push({ label: "(none)", description: "no Makefile found" });
+	}
 }
 
 export function parseMakefile(path:string) {
