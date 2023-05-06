@@ -2,25 +2,91 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+let items: vscode.QuickPickItem[] = [];
+
 export function activate(context: vscode.ExtensionContext) {
+	console.log('Starting make-magic');
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "make-magic" is now active!');
+	items.push({label:"test", description:"test description"});
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('make-magic.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from make-magic!');
+	refreshMakefile();
+	if (vscode.workspace.workspaceFolders !== undefined) {
+		let watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], "[Mm]akefile"));
+		watcher.onDidChange(() => {
+			refreshMakefile();
+		});
+		watcher.onDidCreate(() => {
+			refreshMakefile();
+		});
+		watcher.onDidDelete(() => {
+			refreshMakefile();
+		});
+	}
+
+	let disposable = vscode.commands.registerCommand('make-magic.make', () => {
+		vscode.window.showQuickPick(items).then(selection => {
+			if (!selection) {
+				return;
+			}
+			let focusTerminal:vscode.Terminal = (vscode.window.activeTerminal ? vscode.window.activeTerminal : vscode.window.createTerminal());
+			focusTerminal.show(false);
+			focusTerminal.sendText(`make ${selection.label}`);
+		});
 	});
 
 	context.subscriptions.push(disposable);
 }
+
+export function refreshMakefile() {
+	// if Makefile exists in root path of workspace folder, read it line by line
+	if (vscode.workspace.workspaceFolders === undefined) {
+		return;
+	}
+	if (vscode.workspace.workspaceFolders.length === 0) {
+		return;
+	}
+
+	let path = vscode.workspace.workspaceFolders[0].uri.fsPath + "/Makefile";
+	vscode.workspace.fs.stat(vscode.Uri.file(path)).then(stat => {
+		if (stat.type === vscode.FileType.File) {
+			parseMakefile(path);
+		}
+	});
+
+	path = vscode.workspace.workspaceFolders[0].uri.fsPath + "/makefile";
+	vscode.workspace.fs.stat(vscode.Uri.file(path)).then(stat => {
+		if (stat.type === vscode.FileType.File) {
+			parseMakefile(path);
+		}
+	});
+}
+
+export function parseMakefile(path:string) {
+	const pattern = /^([\w\-]+):/m;
+	let lastComment = "";
+
+	vscode.workspace.openTextDocument(path).then(doc => {
+		items = [];
+		// read line by line
+		for (let i = 0; i < doc.lineCount; i++) {
+			const line = doc.lineAt(i);
+			const match = pattern.exec(line.text);
+			if (match !== null) {
+				// get target name
+				let targetName = match[1];
+				// add target to items
+				items.push({label:targetName, description:lastComment ? lastComment : targetName});
+			}
+			let comment = line.text.trim();
+			if (comment.startsWith("#")) {
+				lastComment = comment.substring(1).trim();
+			} else if (!comment.startsWith(".PHONY")) {
+        		lastComment = "";
+      		}
+		}
+	});
+}
+
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
